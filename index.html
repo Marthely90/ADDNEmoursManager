@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Présence</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        #app-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        input[type=email] {
+            width: 95%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            width: 99%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ccc;
+            text-align: center;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .checkboxes {
+            display: flex;
+            justify-content: space-around;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <h2>ADD NEMOURS Manager</h2>
+
+        <!-- Step 1: Email input -->
+        <div id="step1">
+            <label for="email">Entrez votre email :</label>
+            <input type="email" id="email" placeholder="Votre email..." required>
+            <button onclick="submitEmail()">Valider</button>
+        </div>
+
+        <!-- Step 2: Calendar appears -->
+        <div id="step2" style="display:none;">
+            <h3 id="calendar-title">Calendrier de Présence</h3> <!-- Le titre sera mis à jour ici -->
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Absent</th>
+                        <th>Présent</th>
+                    </tr>
+                </thead>
+                <tbody id="calendar-body">
+                    <!-- Calendar rows will be injected here -->
+                </tbody>
+            </table>
+            <button onclick="submitAttendance()">Soumettre</button>
+        </div>
+        
+    </div>
+
+    <script>
+        const API_URL = "https://sheetdb.io/api/v1/r3cjymdb787v6"; // Remplacer par votre URL d'API SheetDB
+    
+        // Soumettre l'email pour rechercher l'utilisateur
+        async function submitEmail() {
+            const email = document.getElementById('email').value.trim();
+
+            if (email) {
+                try {
+                    // Construire l'URL avec l'email comme paramètre de recherche
+                    const url = `${API_URL}/search?Email=${email}`;
+                    
+                    // Faire la requête GET avec des en-têtes personnalisés
+                    const response = await fetch(url, {
+                        method: "GET", // méthode GET pour récupérer les données
+                        headers: {
+                            "Content-Type": "application/json", // Type de contenu
+                            "Cache-Control": "no-cache" // Empêcher la mise en cache
+                        }
+                    });
+
+                    // Vérifier si la réponse est correcte
+                    if (!response.ok) {
+                        throw new Error(`Erreur lors de la récupération des données: ${response.statusText}`);
+                    }
+
+                    const data = await response.json(); // Traiter la réponse JSON
+
+                    if (data.length > 0) {
+                        const user = data[0]; // Premier utilisateur trouvé
+                        localStorage.setItem('userEmail', email);
+                        localStorage.setItem('userName', user.Nom); // Stocker le nom de l'utilisateur
+                        document.getElementById('step1').style.display = 'none';
+                        document.getElementById('step2').style.display = 'block';
+
+                        // Afficher le nom de l'utilisateur dans le titre du calendrier
+                        document.querySelector('#calendar-title').textContent = `Calendrier de Présence de : ${user.Nom}`;
+                        
+                        // Générer le calendrier avec les données de l'utilisateur
+                        generateCalendar(user);
+                    } else {
+                        alert("Utilisateur non trouvé.");
+                    }
+                } catch (error) {
+                    console.error('Erreur lors de la récupération des données :', error);
+                    alert("Erreur lors de la récupération des données.");
+                }
+            } else {
+                alert('Veuillez entrer un email valide.');
+            }
+        }
+
+    
+        // Générer le calendrier et pré-remplir les informations
+        function generateCalendar(userData) {
+            const calendarBody = document.getElementById('calendar-body');
+            calendarBody.innerHTML = ''; // Effacer les données précédentes
+    
+            const currentDate = new Date();
+            const endDate = new Date(currentDate.getFullYear(), 11, 31); // Fin de l'année (31 décembre)
+            let nextSunday = new Date(currentDate);
+    
+            // Si aujourd'hui n'est pas un dimanche, trouver le prochain dimanche
+            while (nextSunday.getDay() !== 0) {
+                nextSunday.setDate(nextSunday.getDate() + 1);
+            }
+    
+            // Boucle pour chaque dimanche jusqu'à la fin de l'année
+            while (nextSunday <= endDate) {
+                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                const formattedDate = nextSunday.toLocaleDateString('fr-FR', options).replace(/\b1\b/, '1er');
+    
+                const sundayKey = nextSunday.toLocaleDateString('en-GB'); // Format clé dans le JSON (dd/mm/yyyy)
+                // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
+                const formatted_sundayKey = sundayKey.replace(/\b0(\d)\b/g, '$1');
+    
+                // Vérifier si l'utilisateur a déjà rempli cette date
+                const presence = userData[formatted_sundayKey] ? userData[formatted_sundayKey].toLowerCase() : '';
+    
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td><input type="radio" name="attendance-${sundayKey}" value="absent" ${presence === 'absent' ? 'checked' : ''}></td>
+                    <td><input type="radio" name="attendance-${sundayKey}" value="present" ${presence === 'présent' ? 'checked' : ''}></td>
+                `;
+                calendarBody.appendChild(row);
+    
+                // Passer au dimanche suivant
+                nextSunday.setDate(nextSunday.getDate() + 7);
+            }
+        }
+    
+        // Soumettre les données de présence mises à jour
+        async function submitAttendance() {
+            const email = localStorage.getItem('userEmail');
+            const rows = document.querySelectorAll('#calendar-body tr');
+            const attendanceData = {};
+
+            rows.forEach(row => {
+                var date = row.cells[0].textContent;
+                // Remplacer '1er' par '1' et décembre par decembre si présent dans la chaîne de date
+                date = date.replace('1er', '01').replace('décembre ', 'decembre');
+                const formattedDate = new Date(date).toLocaleDateString('en-GB'); // Format clé dans le JSON
+
+                // Récupérer les éléments radio (absent et présent)
+                const absentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="absent"]`);
+                const presentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="present"]`);
+
+                // Vérifier si les cases à cocher existent avant d'accéder à 'checked'
+                const absent = absentRadio ? absentRadio.checked : false;
+                const present = presentRadio ? presentRadio.checked : false;
+
+                // Enregistrer "absent" ou "présent" si une option est cochée
+                if (absent) {
+                    attendanceData[formattedDate] = 'absent';
+                } else if (present) {
+                    attendanceData[formattedDate] = 'présent';
+                } else {
+                    // Si aucune option n'a été cochée, ne rien faire ou laisser vide
+                    attendanceData[formattedDate] = '';
+                }
+            });
+            
+            // Maintenant, appliquer les transformations juste avant l'envoi des données
+            const formattedAttendanceData = {};
+
+            for (const [key, value] of Object.entries(attendanceData)) {
+                let formattedKey = key;
+
+                // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
+                formattedKey = formattedKey.replace(/\b0(\d)\b/g, '$1');
+
+                formattedAttendanceData[formattedKey] = value;
+            }
+
+            // Formater les données à envoyer dans le format attendu
+            const dataToSend = {
+                data: formattedAttendanceData
+            };
+
+            // Mettre à jour la ligne correspondante dans le fichier Excel via SheetDB avec POST
+            try {
+                const response = await fetch(`${API_URL}/Email/${email}`, {
+                    method: "PATCH",
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',  // On garde l'en-tête Content-Type
+                        'Cache-Control': 'no-cache'          // On garde l'en-tête Cache-Control si nécessaire
+                    },
+                    body: JSON.stringify({
+                        data : {...dataToSend}
+                    })
+                });
+
+                if (response.ok) {
+                    alert("Données mises à jour avec succès !");
+                } else {
+                    alert("Erreur lors de la mise à jour des données.");
+                }
+            } catch (error) {
+                console.error('Erreur lors de la mise à jour :', error);
+                alert("Erreur lors de la mise à jour.");
+            }
+        }
+
+
+    </script>
+    
+</body>
+</html>
