@@ -86,6 +86,17 @@
     <script>
         const API_URL = "https://sheetdb.io/api/v1/r3cjymdb787v6"; // Remplacer par votre URL d'API SheetDB
     
+        // Fonction pour détecter Safari
+        function isSafari() {
+        const ua = navigator.userAgent.toLowerCase();
+        return ua.includes('safari') && !ua.includes('chrome');
+        }
+
+        // Afficher une alerte si le navigateur est Safari
+        if (isSafari()) {
+            alert("Vous utilisez Safari, un prblème a été signalé sur ce navigateur. En attendant sa résolution, il est recommandé d'utiliser un autre navigateur internet si vous le pouvez.");
+        }
+
         // Soumettre l'email pour rechercher l'utilisateur
         async function submitEmail() {
             const email = document.getElementById('email').value.trim();
@@ -186,6 +197,7 @@
                 // Remplacer '1er' par '1' et décembre par decembre si présent dans la chaîne de date
                 date = date.replace('1er', '01').replace('décembre ', 'decembre');
                 const formattedDate = new Date(date).toLocaleDateString('en-GB'); // Format clé dans le JSON
+                console.log(date,formattedDate)
 
                 // Récupérer les éléments radio (absent et présent)
                 const absentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="absent"]`);
