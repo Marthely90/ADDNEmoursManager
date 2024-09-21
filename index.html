@@ -213,7 +213,6 @@
                 // Remplacer '1er' par '1' et décembre par decembre si présent dans la chaîne de date
                 date = date.replace('1er', '01').replace('décembre ', 'decembre');
                 const formattedDate = new Date(date).toLocaleDateString('en-GB'); // Format clé dans le JSON
-                console.log(date,formattedDate)
 
                 // Récupérer les éléments radio (absent et présent)
                 const absentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="absent"]`);
