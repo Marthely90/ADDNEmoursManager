@@ -104,13 +104,8 @@
     
         // Fonction pour détecter Safari
         function isSafari() {
-        const ua = navigator.userAgent.toLowerCase();
-        return ua.includes('safari') && !ua.includes('chrome');
-        }
-
-        // Afficher une alerte si le navigateur est Safari
-        if (isSafari()) {
-            alert("Vous utilisez Safari, un prblème a été signalé sur ce navigateur. En attendant sa résolution, il est recommandé d'utiliser un autre navigateur internet si vous le pouvez.");
+            const ua = navigator.userAgent.toLowerCase();
+            return ua.includes('safari') && !ua.includes('chrome');
         }
 
         // Soumettre l'email pour rechercher l'utilisateur
@@ -184,7 +179,11 @@
     
                 const sundayKey = nextSunday.toLocaleDateString('en-GB'); // Format clé dans le JSON (dd/mm/yyyy)
                 // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
-                const formatted_sundayKey = sundayKey.replace(/\b0(\d)\b/g, '$1');
+                let formatted_sundayKey = sundayKey.replace(/\b0(\d)\b/g, '$1');
+
+                // Use ISO format for the date key
+                const dateKey = nextSunday.toISOString().substring(0, 10);
+                //if (isSafari()) formatted_sundayKey = dateKey.replace(/\b(\d)\//g, '0$1/');
     
                 // Vérifier si l'utilisateur a déjà rempli cette date
                 const presence = userData[formatted_sundayKey] ? userData[formatted_sundayKey].toLowerCase() : '';
@@ -212,7 +211,15 @@
                 var date = row.cells[0].textContent;
                 // Remplacer '1er' par '1' et décembre par decembre si présent dans la chaîne de date
                 date = date.replace('1er', '01').replace('décembre ', 'decembre');
-                const formattedDate = new Date(date).toLocaleDateString('en-GB'); // Format clé dans le JSON
+                //if (isSafari() && date.includes("decembre"))  date = date.replace('1er', '01').replace('décembre ', 'decembre');
+                let formattedDate = new Date(date).toLocaleDateString('en-GB'); // Format clé dans le JSON
+                if (isSafari() && date.includes("decembre") ) {
+                    const currentDate = new Date();
+                    let date_day = date.split(" ")[1]
+                    if(parseInt(date_day) < 10 && parseInt(date_day)> 1) date_day = "0" + date_day
+                    formattedDate = date_day + "/12/" + currentDate.getFullYear()
+                }
+
 
                 // Récupérer les éléments radio (absent et présent)
                 const absentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="absent"]`);
@@ -235,13 +242,14 @@
             
             // Maintenant, appliquer les transformations juste avant l'envoi des données
             const formattedAttendanceData = {};
-
+            
             for (const [key, value] of Object.entries(attendanceData)) {
                 let formattedKey = key;
-
+                
                 // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
                 formattedKey = formattedKey.replace(/\b0(\d)\b/g, '$1');
-
+                //if(isSafari())  formattedKey = formattedKey.replace(/\b(\d)\//g, '0$1/');
+                
                 formattedAttendanceData[formattedKey] = value;
             }
 
