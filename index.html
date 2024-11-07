@@ -162,9 +162,19 @@
         function generateCalendar(userData) {
             const calendarBody = document.getElementById('calendar-body');
             calendarBody.innerHTML = ''; // Effacer les données précédentes
-    
             const currentDate = new Date();
-            const endDate = new Date(currentDate.getFullYear(), 11, 31); // Fin de l'année (31 décembre)
+            let unExistingDate = '';
+    
+            let endDate = new Date(currentDate.getFullYear(), 11, 31); // Fin de l'année (31 décembre)
+            if(currentDate.getMonth() >= 10 ){
+                /** 
+                 * A partir du mois de novembre on affiche le premier trimetres de l'année suivante
+                 * N'oublié pas de mettre à jours les dates du fuchier excel et de vider les valeurs (présent/absent)
+                 * Faite cette opération pour toutes les dates passées.
+                 * Attentiez penser à refaire cette opération en début d'années pour les dates de fin d'années.
+                */
+                endDate = new Date(currentDate.getFullYear() + 1, 3, 1); // Fin du premier trimestre de l'année suivante (1er avril)
+            }
             let nextSunday = new Date(currentDate);
     
             // Si aujourd'hui n'est pas un dimanche, trouver le prochain dimanche
@@ -176,6 +186,7 @@
             while (nextSunday <= endDate) {
                 const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
                 const formattedDate = nextSunday.toLocaleDateString('fr-FR', options).replace(/\b1\b/, '1er');
+                
     
                 const sundayKey = nextSunday.toLocaleDateString('en-GB'); // Format clé dans le JSON (dd/mm/yyyy)
                 // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
@@ -183,7 +194,11 @@
 
                 // Use ISO format for the date key
                 const dateKey = nextSunday.toISOString().substring(0, 10);
-                //if (isSafari()) formatted_sundayKey = dateKey.replace(/\b(\d)\//g, '0$1/');
+
+                //Verifier que la date existe dans la liste userData
+                if (typeof userData[formatted_sundayKey] == "undefined") {
+                        unExistingDate += formattedDate + ", "
+                }
     
                 // Vérifier si l'utilisateur a déjà rempli cette date
                 const presence = userData[formatted_sundayKey] ? userData[formatted_sundayKey].toLowerCase() : '';
@@ -199,6 +214,9 @@
                 // Passer au dimanche suivant
                 nextSunday.setDate(nextSunday.getDate() + 7);
             }
+            if(unExistingDate !=='') alert(` Les dates suivantes n'éxistent pas dans le planning: 
+            ${unExistingDate.slice(0, -2)} 
+            Veuillez contacter un responsable de service pour les ajouter. `)
         }
     
         // Soumettre les données de présence mises à jour
@@ -208,17 +226,30 @@
             const attendanceData = {};
 
             rows.forEach(row => {
-                var date = row.cells[0].textContent;
-                // Remplacer '1er' par '1' et décembre par decembre si présent dans la chaîne de date
-                date = date.replace('1er', '01').replace('décembre ', 'decembre');
-                //if (isSafari() && date.includes("decembre"))  date = date.replace('1er', '01').replace('décembre ', 'decembre');
-                let formattedDate = new Date(date).toLocaleDateString('en-GB'); // Format clé dans le JSON
-                if (isSafari() && date.includes("decembre") ) {
-                    const currentDate = new Date();
-                    let date_day = date.split(" ")[1]
-                    if(parseInt(date_day) < 10 && parseInt(date_day)> 1) date_day = "0" + date_day
-                    formattedDate = date_day + "/12/" + currentDate.getFullYear()
+                let date = row.cells[0].textContent;
+                // Remplacer '1er' par '1' si présent dans la chaîne de date
+                date = date.replace('1er', '01');
+                // Remplacer le mois par son numéro dans la chaîne de date pour la correspondance dans le fichier Excel
+                let month_list = {
+                    "janvier": "01",
+                    "février": "02",
+                    "mars": "03",
+                    "avril": "04",
+                    "mai": "05",
+                    "juin": "06",
+                    "juillet": "07",
+                    "août": "08",
+                    "septembre": "09",
+                    "octobre": "10",
+                    "novembre": "11",
+                    "décembre": "12"
                 }
+                // Extraire le jour, le mois et l'année de la date
+                let date_day = date.split(" ")[1];
+                if(parseInt(date_day) < 10 && parseInt(date_day)> 1) date_day = "0" + date_day
+                let date_month = month_list[date.split(" ")[2]];
+                let date_year = date.split(" ")[3];
+                let formattedDate = date_day + "/" + date_month + "/" + date_year;
 
 
                 // Récupérer les éléments radio (absent et présent)
