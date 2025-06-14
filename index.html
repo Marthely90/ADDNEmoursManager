@@ -169,31 +169,31 @@
             if(currentDate.getMonth() >= 10 ){
                 /** 
                  * A partir du mois de novembre on affiche le premier trimetres de l'année suivante
-                 * N'oublié pas de mettre à jours les dates du fuchier excel et de vider les valeurs (présent/absent)
+                 * N'oublier pas de mettre à jours les dates du fichier excel et de vider les valeurs (présent/absent)
                  * Faite cette opération pour toutes les dates passées.
-                 * Attentiez penser à refaire cette opération en début d'années pour les dates de fin d'années.
+                 * Attention penser à refaire cette opération en début d'années pour les dates de fin d'années.
                 */
                 endDate = new Date(currentDate.getFullYear() + 1, 3, 1); // Fin du premier trimestre de l'année suivante (1er avril)
             }
-            let nextSunday = new Date(currentDate);
+            let nextDay = new Date(currentDate);
     
-            // Si aujourd'hui n'est pas un dimanche, trouver le prochain dimanche
-            while (nextSunday.getDay() !== 0) {
-                nextSunday.setDate(nextSunday.getDate() + 1);
+            // Trouver le prochain dimanche ou mercredi
+            while (nextDay.getDay() !== 0 && nextDay.getDay() !== 3) {
+                nextDay.setDate(nextDay.getDate() + 1);
             }
-    
+            
             // Boucle pour chaque dimanche jusqu'à la fin de l'année
-            while (nextSunday <= endDate) {
+            while (nextDay <= endDate) {
                 const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-                const formattedDate = nextSunday.toLocaleDateString('fr-FR', options).replace(/\b1\b/, '1er');
+                const formattedDate = nextDay.toLocaleDateString('fr-FR', options).replace(/\b1\b/, '1er');
                 
     
-                const sundayKey = nextSunday.toLocaleDateString('en-GB'); // Format clé dans le JSON (dd/mm/yyyy)
+                const sundayKey = nextDay.toLocaleDateString('en-GB'); // Format clé dans le JSON (dd/mm/yyyy)
                 // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
                 let formatted_sundayKey = sundayKey.replace(/\b0(\d)\b/g, '$1');
 
                 // Use ISO format for the date key
-                const dateKey = nextSunday.toISOString().substring(0, 10);
+                const dateKey = nextDay.toISOString().substring(0, 10);
 
                 //Verifier que la date existe dans la liste userData
                 if (typeof userData[formatted_sundayKey] == "undefined") {
@@ -211,8 +211,12 @@
                 `;
                 calendarBody.appendChild(row);
     
-                // Passer au dimanche suivant
-                nextSunday.setDate(nextSunday.getDate() + 7);
+                // Passer au prochain dimanche ou mercredi
+                if (nextDay.getDay() === 0) { // Si c'est dimanche
+                    nextDay.setDate(nextDay.getDate() + 3); // Ajouter 3 jours pour mercredi
+                } else { // Si c'est mercredi
+                    nextDay.setDate(nextDay.getDate() + 4); // Ajouter 4 jours pour dimanche
+                }
             }
             if(unExistingDate !=='') alert(` Les dates suivantes n'éxistent pas dans le planning: 
             ${unExistingDate.slice(0, -2)} 
