@@ -182,7 +182,7 @@
                 nextDay.setDate(nextDay.getDate() + 1);
             }
             
-            // Boucle pour chaque dimanche jusqu'à la fin de l'année
+            // Boucle pour chaque jour jusqu'à la fin de l'année
             while (nextDay <= endDate) {
                 const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
                 const formattedDate = nextDay.toLocaleDateString('fr-FR', options).replace(/\b1\b/, '1er');
