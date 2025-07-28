@@ -283,10 +283,6 @@
             for (const [key, value] of Object.entries(attendanceData)) {
                 let formattedKey = key;
                 
-                // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
-                formattedKey = formattedKey.replace(/\b0(\d)\b/g, '$1');
-                //if(isSafari())  formattedKey = formattedKey.replace(/\b(\d)\//g, '0$1/');
-                
                 formattedAttendanceData[formattedKey] = value;
             }
 
