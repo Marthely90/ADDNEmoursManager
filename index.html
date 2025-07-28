@@ -144,6 +144,7 @@
                         document.querySelector('#calendar-title').textContent = `Calendrier de Présence de : ${user.Nom}`;
                         
                         // Générer le calendrier avec les données de l'utilisateur
+                        console.log(user)
                         generateCalendar(user);
                     } else {
                         alert("Utilisateur non trouvé.");
@@ -190,7 +191,8 @@
     
                 const sundayKey = nextDay.toLocaleDateString('en-GB'); // Format clé dans le JSON (dd/mm/yyyy)
                 // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
-                let formatted_sundayKey = sundayKey.replace(/\b0(\d)\b/g, '$1');
+                let [day, month, year] = sundayKey.split('/');
+                let formatted_sundayKey = `${day}/${month}/${year}`;
 
                 // Use ISO format for the date key
                 const dateKey = nextDay.toISOString().substring(0, 10);
