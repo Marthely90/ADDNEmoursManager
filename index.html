@@ -32,6 +32,11 @@
             margin: 10px 0;
             border: 1px solid #ccc;
             border-radius: 5px;
+            cursor: pointer;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         table {
             width: 100%;
@@ -46,19 +51,76 @@
         th {
             background-color: #f4f4f4;
         }
-        a{
-            float:right;
+        a {
+            float: right;
             text-align: right;
             color: blue;
-            text-decoration:none;
+            text-decoration: none;
         }
-        a:hover{
+        a:hover {
             text-decoration: underline;
             color: cadetblue;
         }
         .checkboxes {
             display: flex;
             justify-content: space-around;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #333;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        .toast.success {
+            background-color: #4caf50;
+        }
+        .toast.error {
+            background-color: #f44336;
+        }
+        .toast.warning {
+            background-color: #ff9800;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #333;
+            animation: spin 1s ease-in-out infinite;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+            #app-container {
+                margin: 10px;
+                padding: 15px;
+            }
+            table {
+                font-size: 14px;
+            }
+            th, td {
+                padding: 8px;
+            }
         }
     </style>
 </head>
@@ -69,255 +131,478 @@
         <!-- Step 1: Email input -->
         <div id="step1">
             <label for="email">Entrez votre email :</label>
-            <input type="email" id="email" placeholder="Votre email..." required>
-            <button onclick="submitEmail()">Valider</button>
+            <input
+                type="email"
+                id="email"
+                placeholder="Votre email..."
+                required
+                aria-label="Adresse email"
+                aria-required="true"
+            >
+            <button onclick="submitEmail()" aria-label="Valider l'email">Valider</button>
         </div>
 
         <!-- Step 2: Calendar appears -->
         <div id="step2" style="display:none;">
-            <a href="https://docs.google.com/spreadsheets/d/18rYWWCHPpa3eW3bT7hFvgIhfnsu5lxoHtlJFkWtAWIo/edit?gid=951914791#gid=951914791" target="_blank" title="cliquer pour voir le planning">
-                planning 
+            <a
+                href="https://docs.google.com/spreadsheets/d/18rYWWCHPpa3eW3bT7hFvgIhfnsu5lxoHtlJFkWtAWIo/edit?gid=951914791#gid=951914791"
+                target="_blank"
+                title="cliquer pour voir le planning"
+                aria-label="Voir le planning annuel"
+            >
+                planning
                 <br/>
                 annuel
             </a>
-            <h3 id="calendar-title">Calendrier de Présence</h3> <!-- Le titre sera mis à jour ici -->
-            <table>
+            <h3 id="calendar-title" role="heading" aria-level="3">Calendrier de Présence</h3>
+            <p id="date-range-display" style="font-size: 14px; color: #666;"></p>
+            <table role="table" aria-label="Calendrier de présence">
                 <thead>
                     <tr>
-                        <th>Date</th>
-                        <th>Absent</th>
-                        <th>Présent</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Absent</th>
+                        <th scope="col">Présent</th>
                     </tr>
                 </thead>
                 <tbody id="calendar-body">
                     <!-- Calendar rows will be injected here -->
                 </tbody>
             </table>
-            <button onclick="submitAttendance()">Soumettre</button>
+            <button onclick="submitAttendance()" aria-label="Soumettre les présences">Soumettre</button>
         </div>
-        
     </div>
 
     <script>
-        "use strict"; // Activer le mode strict
-        const API_URL = "https://sheetdb.io/api/v1/x0mpyfueup16n"; // Remplacer par votre URL d'API SheetDB
-    
-        // Fonction pour détecter Safari
-        function isSafari() {
-            const ua = navigator.userAgent.toLowerCase();
-            return ua.includes('safari') && !ua.includes('chrome');
+        "use strict";
+
+        // ==================== CONSTANTS ====================
+        const API_URL = "https://sheetdb.io/api/v1/x0mpyfueup16n";
+
+        const MONTHS = {
+            "janvier": "01",
+            "février": "02",
+            "mars": "03",
+            "avril": "04",
+            "mai": "05",
+            "juin": "06",
+            "juillet": "07",
+            "août": "08",
+            "septembre": "09",
+            "octobre": "10",
+            "novembre": "11",
+            "décembre": "12"
+        };
+
+        const DAYS = {
+            SUNDAY: 0,
+            WEDNESDAY: 3
+        };
+
+        const MONTHS_INDEX = {
+            NOVEMBER: 10,
+            DECEMBER: 11,
+            APRIL: 3
+        };
+
+        const ATTENDANCE_VALUES = {
+            ABSENT: 'absent',
+            PRESENT: 'présent',
+            EMPTY: ''
+        };
+
+        const TOAST_DURATION = 4000;
+
+        // ==================== STATE MANAGEMENT ====================
+        let hasUnsavedChanges = false;
+
+        // ==================== UTILITY FUNCTIONS ====================
+
+        /**
+         * Show a toast notification
+         * @param {string} message - The message to display
+         * @param {string} type - Toast type: 'success', 'error', 'warning', 'info'
+         */
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'polite');
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, TOAST_DURATION);
         }
 
-        // Soumettre l'email pour rechercher l'utilisateur
-        async function submitEmail() {
-            const email = document.getElementById('email').value.trim();
-
-            if (email) {
-                try {
-                    // Construire l'URL avec l'email comme paramètre de recherche
-                    const url = `${API_URL}/search?Email=${email}`;
-                    
-                    // Faire la requête GET avec des en-têtes personnalisés
-                    const response = await fetch(url, {
-                        method: "GET", // méthode GET pour récupérer les données
-                        headers: {
-                            "Content-Type": "application/json", // Type de contenu
-                            "Cache-Control": "no-cache" // Empêcher la mise en cache
-                        }
-                    });
-
-                    // Vérifier si la réponse est correcte
-                    if (!response.ok) {
-                        throw new Error(`Erreur lors de la récupération des données: ${response.statusText}`);
-                    }
-
-                    const data = await response.json(); // Traiter la réponse JSON
-
-                    if (data.length > 0) {
-                        const user = data[0]; // Premier utilisateur trouvé
-                        localStorage.setItem('userEmail', email);
-                        localStorage.setItem('userName', user.Nom); // Stocker le nom de l'utilisateur
-                        document.getElementById('step1').style.display = 'none';
-                        document.getElementById('step2').style.display = 'block';
-
-                        // Afficher le nom de l'utilisateur dans le titre du calendrier
-                        document.querySelector('#calendar-title').textContent = `Calendrier de Présence de : ${user.Nom}`;
-                        
-                        // Générer le calendrier avec les données de l'utilisateur
-                        console.log(user)
-                        generateCalendar(user);
-                    } else {
-                        alert("Utilisateur non trouvé.");
-                    }
-                } catch (error) {
-                    console.error('Erreur lors de la récupération des données :', error);
-                    alert("Erreur lors de la récupération des données.");
-                }
+        /**
+         * Set loading state for a button
+         * @param {HTMLButtonElement} button - The button element
+         * @param {boolean} isLoading - Loading state
+         */
+        function setButtonLoading(button, isLoading) {
+            if (isLoading) {
+                button.disabled = true;
+                button.dataset.originalText = button.textContent;
+                button.innerHTML = `${button.dataset.originalText}<span class="loading"></span>`;
             } else {
-                alert('Veuillez entrer un email valide.');
+                button.disabled = false;
+                button.textContent = button.dataset.originalText || button.textContent;
+                delete button.dataset.originalText;
             }
         }
 
-    
-        // Générer le calendrier et pré-remplir les informations
+        /**
+         * Format a date with leading zeros
+         * @param {number} day - Day of the month
+         * @returns {string} Formatted day
+         */
+        function formatDay(day) {
+            return day < 10 ? `0${day}` : `${day}`;
+        }
+
+        /**
+         * Parse French date string to date components
+         * @param {string} dateString - Date string in French format
+         * @returns {{day: string, month: string, year: string}}
+         */
+        function parseFrenchDate(dateString) {
+            // Replace '1er' with '01' if present
+            let normalizedDate = dateString.replace('1er', '01');
+
+            const parts = normalizedDate.split(" ");
+            let day = parts[1];
+            const monthName = parts[2];
+            const year = parts[3];
+
+            // Add leading zero for single digit days > 1
+            if (parseInt(day) < 10 && parseInt(day) > 1) {
+                day = formatDay(parseInt(day));
+            }
+
+            const month = MONTHS[monthName];
+
+            return { day, month, year };
+        }
+
+        /**
+         * Format date components to dd/mm/yyyy
+         * @param {{day: string, month: string, year: string}} dateComponents
+         * @returns {string}
+         */
+        function formatDateKey(dateComponents) {
+            return `${dateComponents.day}/${dateComponents.month}/${dateComponents.year}`;
+        }
+
+        /**
+         * Get the next attendance day (Sunday or Wednesday)
+         * @param {Date} startDate - Starting date
+         * @returns {Date}
+         */
+        function getNextAttendanceDay(startDate) {
+            const date = new Date(startDate);
+            while (date.getDay() !== DAYS.SUNDAY && date.getDay() !== DAYS.WEDNESDAY) {
+                date.setDate(date.getDate() + 1);
+            }
+            return date;
+        }
+
+        /**
+         * Calculate end date based on current month
+         * @param {Date} currentDate
+         * @returns {Date}
+         */
+        function calculateEndDate(currentDate) {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            // From November onwards, show Q1 of next year
+            if (month >= MONTHS_INDEX.NOVEMBER) {
+                return new Date(year + 1, MONTHS_INDEX.APRIL, 1);
+            }
+
+            // Otherwise show until end of current year
+            return new Date(year, MONTHS_INDEX.DECEMBER, 31);
+        }
+
+        /**
+         * Advance to next attendance day
+         * @param {Date} date - Current date
+         * @returns {Date} Next attendance date
+         */
+        function advanceToNextAttendanceDay(date) {
+            const newDate = new Date(date);
+            if (newDate.getDay() === DAYS.SUNDAY) {
+                newDate.setDate(newDate.getDate() + 3); // Sunday -> Wednesday
+            } else {
+                newDate.setDate(newDate.getDate() + 4); // Wednesday -> Sunday
+            }
+            return newDate;
+        }
+
+        /**
+         * Format date range display
+         * @param {Date} startDate
+         * @param {Date} endDate
+         * @returns {string}
+         */
+        function formatDateRange(startDate, endDate) {
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            const start = startDate.toLocaleDateString('fr-FR', options);
+            const end = endDate.toLocaleDateString('fr-FR', options);
+            return `Période : ${start} - ${end}`;
+        }
+
+        // ==================== CALENDAR GENERATION ====================
+
+        /**
+         * Create a calendar row for a specific date
+         * @param {Date} date - The date for the row
+         * @param {Object} userData - User attendance data
+         * @returns {{row: HTMLTableRowElement, dateKey: string, exists: boolean}}
+         */
+        function createCalendarRow(date, userData) {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const formattedDate = date.toLocaleDateString('fr-FR', options).replace(/\b1\b/, '1er');
+
+            const dateKey = date.toLocaleDateString('en-GB');
+            const [day, month, year] = dateKey.split('/');
+            const normalizedDateKey = `${day}/${month}/${year}`;
+
+            // Check if date exists in user data
+            const dateExists = typeof userData[normalizedDateKey] !== "undefined";
+
+            // Get attendance status
+            const presence = userData[normalizedDateKey]
+                ? userData[normalizedDateKey].toLowerCase()
+                : '';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${formattedDate}</td>
+                <td>
+                    <input
+                        type="radio"
+                        name="attendance-${dateKey}"
+                        value="${ATTENDANCE_VALUES.ABSENT}"
+                        ${presence === ATTENDANCE_VALUES.ABSENT ? 'checked' : ''}
+                        onchange="markUnsavedChanges()"
+                        aria-label="Absent le ${formattedDate}"
+                    >
+                </td>
+                <td>
+                    <input
+                        type="radio"
+                        name="attendance-${dateKey}"
+                        value="${ATTENDANCE_VALUES.PRESENT}"
+                        ${presence === ATTENDANCE_VALUES.PRESENT ? 'checked' : ''}
+                        onchange="markUnsavedChanges()"
+                        aria-label="Présent le ${formattedDate}"
+                    >
+                </td>
+            `;
+
+            return { row, dateKey: normalizedDateKey, formattedDate, exists: dateExists };
+        }
+
+        /**
+         * Generate the attendance calendar
+         * @param {Object} userData - User data from API
+         */
         function generateCalendar(userData) {
             const calendarBody = document.getElementById('calendar-body');
-            calendarBody.innerHTML = ''; // Effacer les données précédentes
+            calendarBody.innerHTML = '';
+
             const currentDate = new Date();
-            let unExistingDate = '';
-    
-            let endDate = new Date(currentDate.getFullYear(), 11, 31); // Fin de l'année (31 décembre)
-            if(currentDate.getMonth() >= 10 ){
-                /** 
-                 * A partir du mois de novembre on affiche le premier trimetres de l'année suivante
-                 * N'oublier pas de mettre à jours les dates du fichier excel et de vider les valeurs (présent/absent)
-                 * Faite cette opération pour toutes les dates passées.
-                 * Attention penser à refaire cette opération en début d'années pour les dates de fin d'années.
-                */
-                endDate = new Date(currentDate.getFullYear() + 1, 3, 1); // Fin du premier trimestre de l'année suivante (1er avril)
-            }
-            let nextDay = new Date(currentDate);
-    
-            // Trouver le prochain dimanche ou mercredi
-            while (nextDay.getDay() !== 0 && nextDay.getDay() !== 3) {
-                nextDay.setDate(nextDay.getDate() + 1);
-            }
-            
-            // Boucle pour chaque jour jusqu'à la fin de l'année
-            while (nextDay <= endDate) {
-                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-                const formattedDate = nextDay.toLocaleDateString('fr-FR', options).replace(/\b1\b/, '1er');
-                
-    
-                const sundayKey = nextDay.toLocaleDateString('en-GB'); // Format clé dans le JSON (dd/mm/yyyy)
-                // Supprimer le zéro devant les jours inférieurs à 10 (par exemple, '01' devient '1')
-                let [day, month, year] = sundayKey.split('/');
-                let formatted_sundayKey = `${day}/${month}/${year}`;
+            const endDate = calculateEndDate(currentDate);
+            const startDate = getNextAttendanceDay(currentDate);
 
-                // Use ISO format for the date key
-                const dateKey = nextDay.toISOString().substring(0, 10);
+            let currentDay = new Date(startDate);
+            const missingDates = [];
 
-                //Verifier que la date existe dans la liste userData
-                if (typeof userData[formatted_sundayKey] == "undefined") {
-                        unExistingDate += formattedDate + ", "
+            // Display date range
+            const dateRangeDisplay = document.getElementById('date-range-display');
+            dateRangeDisplay.textContent = formatDateRange(startDate, endDate);
+
+            // Generate calendar rows
+            while (currentDay <= endDate) {
+                const { row, dateKey, formattedDate, exists } = createCalendarRow(currentDay, userData);
+
+                if (!exists) {
+                    missingDates.push(formattedDate);
                 }
-    
-                // Vérifier si l'utilisateur a déjà rempli cette date
-                const presence = userData[formatted_sundayKey] ? userData[formatted_sundayKey].toLowerCase() : '';
-    
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${formattedDate}</td>
-                    <td><input type="radio" name="attendance-${sundayKey}" value="absent" ${presence === 'absent' ? 'checked' : ''}></td>
-                    <td><input type="radio" name="attendance-${sundayKey}" value="present" ${presence === 'présent' ? 'checked' : ''}></td>
-                `;
+
                 calendarBody.appendChild(row);
-    
-                // Passer au prochain dimanche ou mercredi
-                if (nextDay.getDay() === 0) { // Si c'est dimanche
-                    nextDay.setDate(nextDay.getDate() + 3); // Ajouter 3 jours pour mercredi
-                } else { // Si c'est mercredi
-                    nextDay.setDate(nextDay.getDate() + 4); // Ajouter 4 jours pour dimanche
-                }
+                currentDay = advanceToNextAttendanceDay(currentDay);
             }
-            if(unExistingDate !=='') alert(` Les dates suivantes n'éxistent pas dans le planning: 
-            ${unExistingDate.slice(0, -2)} 
-            Veuillez contacter un responsable de service pour les ajouter. `)
+
+            // Alert about missing dates
+            if (missingDates.length > 0) {
+                showToast(
+                    `Attention : ${missingDates.length} dates manquantes dans le planning. Contactez un responsable.`,
+                    'warning'
+                );
+            }
         }
-    
-        // Soumettre les données de présence mises à jour
-        async function submitAttendance() {
-            const email = localStorage.getItem('userEmail');
+
+        // ==================== DATA SUBMISSION ====================
+
+        /**
+         * Collect attendance data from the calendar
+         * @returns {Object} Attendance data keyed by date
+         */
+        function collectAttendanceData() {
             const rows = document.querySelectorAll('#calendar-body tr');
             const attendanceData = {};
 
             rows.forEach(row => {
-                let date = row.cells[0].textContent;
-                // Remplacer '1er' par '1' si présent dans la chaîne de date
-                date = date.replace('1er', '01');
-                // Remplacer le mois par son numéro dans la chaîne de date pour la correspondance dans le fichier Excel
-                let month_list = {
-                    "janvier": "01",
-                    "février": "02",
-                    "mars": "03",
-                    "avril": "04",
-                    "mai": "05",
-                    "juin": "06",
-                    "juillet": "07",
-                    "août": "08",
-                    "septembre": "09",
-                    "octobre": "10",
-                    "novembre": "11",
-                    "décembre": "12"
-                }
-                // Extraire le jour, le mois et l'année de la date
-                let date_day = date.split(" ")[1];
-                if(parseInt(date_day) < 10 && parseInt(date_day)> 1) date_day = "0" + date_day
-                let date_month = month_list[date.split(" ")[2]];
-                let date_year = date.split(" ")[3];
-                let formattedDate = date_day + "/" + date_month + "/" + date_year;
+                const dateText = row.cells[0].textContent;
+                const { day, month, year } = parseFrenchDate(dateText);
+                const formattedDate = formatDateKey({ day, month, year });
 
+                const absentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="${ATTENDANCE_VALUES.ABSENT}"]`);
+                const presentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="${ATTENDANCE_VALUES.PRESENT}"]`);
 
-                // Récupérer les éléments radio (absent et présent)
-                const absentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="absent"]`);
-                const presentRadio = row.querySelector(`input[name="attendance-${formattedDate}"][value="present"]`);
-
-                // Vérifier si les cases à cocher existent avant d'accéder à 'checked'
-                const absent = absentRadio ? absentRadio.checked : false;
-                const present = presentRadio ? presentRadio.checked : false;
-
-                // Enregistrer "absent" ou "présent" si une option est cochée
-                if (absent) {
-                    attendanceData[formattedDate] = 'absent';
-                } else if (present) {
-                    attendanceData[formattedDate] = 'présent';
+                if (absentRadio?.checked) {
+                    attendanceData[formattedDate] = ATTENDANCE_VALUES.ABSENT;
+                } else if (presentRadio?.checked) {
+                    attendanceData[formattedDate] = ATTENDANCE_VALUES.PRESENT;
                 } else {
-                    // Si aucune option n'a été cochée, ne rien faire ou laisser vide
-                    attendanceData[formattedDate] = '';
+                    attendanceData[formattedDate] = ATTENDANCE_VALUES.EMPTY;
                 }
             });
-            
-            // Maintenant, appliquer les transformations juste avant l'envoi des données
-            const formattedAttendanceData = {};
-            
-            for (const [key, value] of Object.entries(attendanceData)) {
-                let formattedKey = key;
-                
-                formattedAttendanceData[formattedKey] = value;
+
+            return attendanceData;
+        }
+
+        /**
+         * Mark that there are unsaved changes
+         */
+        function markUnsavedChanges() {
+            hasUnsavedChanges = true;
+        }
+
+        // ==================== API FUNCTIONS ====================
+
+        /**
+         * Submit email and fetch user data
+         */
+        async function submitEmail() {
+            const emailInput = document.getElementById('email');
+            const email = emailInput.value.trim();
+
+            if (!email) {
+                showToast('Veuillez entrer un email valide.', 'error');
+                return;
             }
 
-            // Formater les données à envoyer dans le format attendu
-            const dataToSend = {
-                data: formattedAttendanceData
-            };
+            const button = event.target;
+            setButtonLoading(button, true);
 
-            // Mettre à jour la ligne correspondante dans le fichier Excel via SheetDB avec POST
             try {
-                const response = await fetch(`${API_URL}/Email/${email}`, {
+                const url = `${API_URL}/search?Email=${encodeURIComponent(email)}`;
+
+                const response = await fetch(url, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Cache-Control": "no-cache"
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.length > 0) {
+                    const user = data[0];
+                    localStorage.setItem('userEmail', email);
+                    localStorage.setItem('userName', user.Nom);
+
+                    document.getElementById('step1').style.display = 'none';
+                    document.getElementById('step2').style.display = 'block';
+                    document.querySelector('#calendar-title').textContent = `Calendrier de Présence de : ${user.Nom}`;
+
+                    generateCalendar(user);
+                    showToast(`Bienvenue ${user.Nom} !`, 'success');
+                } else {
+                    showToast("Utilisateur non trouvé. Vérifiez votre email.", 'error');
+                }
+            } catch (error) {
+                console.error('Erreur lors de la récupération des données :', error);
+                showToast(`Erreur: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading(button, false);
+            }
+        }
+
+        /**
+         * Submit attendance data
+         */
+        async function submitAttendance() {
+            const email = localStorage.getItem('userEmail');
+
+            if (!email) {
+                showToast('Session expirée. Veuillez vous reconnecter.', 'error');
+                return;
+            }
+
+            const button = event.target;
+            setButtonLoading(button, true);
+
+            try {
+                const attendanceData = collectAttendanceData();
+
+                const response = await fetch(`${API_URL}/Email/${encodeURIComponent(email)}`, {
                     method: "PATCH",
                     headers: {
                         'Accept': 'application/json',
-                        'Content-Type': 'application/json',  // On garde l'en-tête Content-Type
-                        'Cache-Control': 'no-cache'          // On garde l'en-tête Cache-Control si nécessaire
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache'
                     },
                     body: JSON.stringify({
-                        data : {...dataToSend}
+                        data: attendanceData
                     })
                 });
 
                 if (response.ok) {
-                    alert("Données mises à jour avec succès !");
+                    hasUnsavedChanges = false;
+                    showToast("Données enregistrées avec succès !", 'success');
                 } else {
-                    alert("Erreur lors de la mise à jour des données.");
+                    const errorText = await response.text();
+                    throw new Error(`Erreur ${response.status}: ${errorText}`);
                 }
             } catch (error) {
                 console.error('Erreur lors de la mise à jour :', error);
-                alert("Erreur lors de la mise à jour.");
+                showToast(`Erreur lors de l'enregistrement: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading(button, false);
             }
         }
 
+        // ==================== EVENT LISTENERS ====================
 
+        // Warn before leaving page with unsaved changes
+        window.addEventListener('beforeunload', (event) => {
+            if (hasUnsavedChanges) {
+                event.preventDefault();
+                event.returnValue = 'Vous avez des modifications non enregistrées. Voulez-vous vraiment quitter ?';
+                return event.returnValue;
+            }
+        });
+
+        // Allow Enter key to submit email
+        document.addEventListener('DOMContentLoaded', () => {
+            const emailInput = document.getElementById('email');
+            emailInput.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    submitEmail();
+                }
+            });
+        });
     </script>
-    
 </body>
 </html>
